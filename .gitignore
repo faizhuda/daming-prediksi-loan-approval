@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project: large/regenerable model artifacts (keep best_params.json & metrics.json tracked)
+models/*.pkl
+models/*.npz
+_experiment.py
+catboost_info/

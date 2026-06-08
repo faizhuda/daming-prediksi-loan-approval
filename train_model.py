@@ -1,115 +1,143 @@
+"""End-to-end training pipeline for the KOM1338 Loan Approval competition.
+
+Tunes LightGBM, XGBoost and CatBoost with Optuna, builds out-of-fold (OOF)
+predictions for each, blends them by rank, and writes the submission plus all
+reproducible artifacts (best params, OOF arrays, fitted-model count, metrics).
+
+Run:  python train_model.py            # full tuning (slow, ~20-40 min)
+      python train_model.py --fast     # skip tuning, use validated preset params
+      python train_model.py --quick    # few trials, for a fast smoke test
+
+Metric: AUC-ROC (the competition metric). Validation: StratifiedKFold(5).
+"""
+import argparse
+import json
+import pickle
+import sys
 import warnings
-warnings.filterwarnings("ignore")
+from pathlib import Path
+
+# Windows consoles default to cp1252; force UTF-8 so progress/summary prints never crash.
+sys.stdout.reconfigure(encoding="utf-8")
 
 import numpy as np
-import pandas as pd
-from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import roc_auc_score
+
 import lightgbm as lgb
-import optuna
-optuna.logging.set_verbosity(optuna.logging.WARNING)
+import xgboost as xgb
+from catboost import CatBoostClassifier
 
-# ── Load data ──────────────────────────────────────────────────────────────────
-train = pd.read_csv("train.csv")
-test  = pd.read_csv("test.csv")
+import src.loan_pipeline as lp
 
-TARGET    = "loan_status"
-ID_COL    = "sample_id"
-GRADE_MAP = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7}
+warnings.filterwarnings("ignore")
 
-def preprocess(df):
-    df = df.copy()
+MODELS_DIR = Path("models")
 
-    # Ordinal encode loan_grade
-    df["loan_grade"] = df["loan_grade"].map(GRADE_MAP)
+# Validated preset params (no class weighting; shallow trees). Used by --fast so the
+# pipeline can be finalised in minutes; the full Optuna search refines these further.
+PRESET_PARAMS = {
+    "lightgbm": dict(objective="binary", metric="auc", verbosity=-1, n_estimators=964,
+                     learning_rate=0.0101, num_leaves=79, max_depth=4, min_child_samples=69,
+                     feature_fraction=0.797, bagging_fraction=0.734, bagging_freq=4,
+                     reg_alpha=1.6e-4, reg_lambda=1.2e-3, random_state=lp.SEED),
+    "xgboost": dict(objective="binary:logistic", eval_metric="auc", tree_method="hist",
+                    n_estimators=1200, learning_rate=0.015, max_depth=4, min_child_weight=5,
+                    subsample=0.75, colsample_bytree=0.8, reg_alpha=0.1, reg_lambda=1.0,
+                    random_state=lp.SEED),
+    "catboost": dict(iterations=800, learning_rate=0.03, depth=5, l2_leaf_reg=5.0,
+                     random_seed=lp.SEED, verbose=0),
+}
 
-    # One-hot encode categoricals
-    cat_cols = ["person_home_ownership", "loan_intent", "cb_person_default_on_file"]
-    df = pd.get_dummies(df, columns=cat_cols, drop_first=False)
 
-    # Feature engineering
-    df["loan_income_ratio"]  = df["loan_amnt"] / (df["person_income"] + 1)
-    df["int_rate_x_grade"]   = df["loan_int_rate"] * df["loan_grade"]
+def main(quick: bool, fast: bool):
+    n_lgb, n_xgb, n_cat = (5, 5, 5) if quick else (60, 50, 25)
+    MODELS_DIR.mkdir(exist_ok=True)
 
-    return df
+    train, test = lp.load_data(".")
+    print(f"Train: {train.shape} | Test: {test.shape}")
+    print(f"Positive rate: {train[lp.TARGET].mean():.4f}\n")
 
-train_p = preprocess(train)
-test_p  = preprocess(test)
+    # Two views of the data: one-hot (LGBM/XGB) and native-categorical (CatBoost).
+    X_oh, y, X_oh_test = lp.make_onehot(train, test)
+    X_nat, _, X_nat_test, cat_features = lp.make_native(train, test)
 
-# Align columns (test may be missing some dummies)
-test_p = test_p.reindex(columns=train_p.columns.drop([TARGET, ID_COL]), fill_value=0)
+    # ── Obtain hyperparameters (tuned or preset) ─────────────────────────────────
+    if fast:
+        print("Fast mode: using validated preset params (skipping Optuna).\n")
+        lgb_params, xgb_params, cat_params = (
+            PRESET_PARAMS["lightgbm"], PRESET_PARAMS["xgboost"], PRESET_PARAMS["catboost"])
+        lgb_cv = xgb_cv = cat_cv = None
+    else:
+        print("Tuning LightGBM...")
+        lgb_params, lgb_cv = lp.tune_lightgbm(X_oh, y, n_trials=n_lgb)
+        print(f"  best CV AUC = {lgb_cv:.5f}\n")
 
-X = train_p.drop(columns=[TARGET, ID_COL])
-y = train_p[TARGET]
-X_test = test_p
+        print("Tuning XGBoost...")
+        xgb_params, xgb_cv = lp.tune_xgboost(X_oh, y, n_trials=n_xgb)
+        print(f"  best CV AUC = {xgb_cv:.5f}\n")
 
-print(f"Train shape: {X.shape}  |  Test shape: {X_test.shape}")
-print(f"Class distribution:\n{y.value_counts(normalize=True).round(3)}")
+        print("Tuning CatBoost...")
+        cat_params, cat_cv = lp.tune_catboost(X_nat, y, cat_features, n_trials=n_cat)
+        print(f"  best CV AUC = {cat_cv:.5f}\n")
 
-# ── Optuna tuning ──────────────────────────────────────────────────────────────
-SKF = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    lp.save_json(
+        {"lightgbm": lgb_params, "xgboost": xgb_params, "catboost": cat_params},
+        MODELS_DIR / "best_params.json",
+    )
 
-def objective(trial):
-    params = {
-        "objective":       "binary",
-        "metric":          "auc",
-        "verbosity":       -1,
-        "boosting_type":   "gbdt",
-        "n_estimators":    trial.suggest_int("n_estimators", 300, 1200),
-        "learning_rate":   trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
-        "num_leaves":      trial.suggest_int("num_leaves", 31, 255),
-        "max_depth":       trial.suggest_int("max_depth", 4, 12),
-        "min_child_samples": trial.suggest_int("min_child_samples", 10, 100),
-        "feature_fraction": trial.suggest_float("feature_fraction", 0.5, 1.0),
-        "bagging_fraction": trial.suggest_float("bagging_fraction", 0.5, 1.0),
-        "bagging_freq":    trial.suggest_int("bagging_freq", 1, 7),
-        "reg_alpha":       trial.suggest_float("reg_alpha", 1e-4, 10.0, log=True),
-        "reg_lambda":      trial.suggest_float("reg_lambda", 1e-4, 10.0, log=True),
-        "class_weight":    "balanced",
-        "random_state":    42,
+    # ── Fit OOF + test predictions with the tuned params ─────────────────────────
+    print("LightGBM OOF:")
+    oof_lgb, test_lgb, lgb_models = lp.cv_fit_predict(
+        lambda: lgb.LGBMClassifier(**lgb_params), X_oh, y, X_oh_test)
+
+    print("XGBoost OOF:")
+    oof_xgb, test_xgb, xgb_models = lp.cv_fit_predict(
+        lambda: xgb.XGBClassifier(**xgb_params), X_oh, y, X_oh_test)
+
+    print("CatBoost OOF:")
+    oof_cat, test_cat, cat_models = lp.cv_fit_predict(
+        lambda: CatBoostClassifier(**cat_params), X_nat, y, X_nat_test,
+        cat_features=cat_features)
+
+    # ── Blend ────────────────────────────────────────────────────────────────────
+    oof_list = [oof_lgb, oof_xgb, oof_cat]
+    test_list = [test_lgb, test_xgb, test_cat]
+    weights, blend_auc = lp.search_blend_weights(oof_list, y)
+
+    singles = {
+        "lightgbm": roc_auc_score(y, oof_lgb),
+        "xgboost": roc_auc_score(y, oof_xgb),
+        "catboost": roc_auc_score(y, oof_cat),
     }
-    model = lgb.LGBMClassifier(**params)
-    scores = cross_val_score(model, X, y, cv=SKF, scoring="roc_auc", n_jobs=-1)
-    return scores.mean()
+    print("\n── Results ──")
+    for k, v in singles.items():
+        print(f"  {k:10s} OOF AUC = {v:.5f}")
+    print(f"  blend {weights} OOF AUC = {blend_auc:.5f}")
 
-print("\nRunning Optuna (50 trials)...")
-study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=42))
-study.optimize(objective, n_trials=50, show_progress_bar=True)
+    # Final test probabilities use the same rank-blend recipe as OOF.
+    test_blend = lp.rank_blend(test_list, weights)
 
-best_params = study.best_params
-best_params.update({"objective": "binary", "metric": "auc", "verbosity": -1,
-                    "class_weight": "balanced", "random_state": 42})
-print(f"\nBest CV AUC: {study.best_value:.5f}")
-print(f"Best params: {best_params}")
+    # ── Persist artifacts ────────────────────────────────────────────────────────
+    for name, models in [("lgb", lgb_models), ("xgb", xgb_models), ("cat", cat_models)]:
+        with open(MODELS_DIR / f"{name}_models.pkl", "wb") as f:
+            pickle.dump(models, f)
+    np.savez(MODELS_DIR / "oof_predictions.npz",
+             lgb=oof_lgb, xgb=oof_xgb, cat=oof_cat, y=y)
+    lp.save_json(
+        {"single": singles, "blend_weights": list(weights),
+         "blend_oof_auc": blend_auc,
+         "cv_auc": {"lightgbm": lgb_cv, "xgboost": xgb_cv, "catboost": cat_cv}},
+        MODELS_DIR / "metrics.json",
+    )
 
-# ── OOF predictions + final model ─────────────────────────────────────────────
-oof_preds  = np.zeros(len(X))
-test_preds = np.zeros(len(X_test))
+    sub = lp.make_submission(test, test_blend, "submission.csv")
+    print(f"\nSubmission saved -> submission.csv ({len(sub)} rows)")
+    print(sub.head())
 
-for fold, (tr_idx, va_idx) in enumerate(SKF.split(X, y)):
-    X_tr, X_va = X.iloc[tr_idx], X.iloc[va_idx]
-    y_tr, y_va = y.iloc[tr_idx], y.iloc[va_idx]
 
-    model = lgb.LGBMClassifier(**best_params)
-    model.fit(X_tr, y_tr, eval_set=[(X_va, y_va)],
-              callbacks=[lgb.early_stopping(50, verbose=False),
-                         lgb.log_evaluation(period=-1)])
-
-    oof_preds[va_idx]  = model.predict_proba(X_va)[:, 1]
-    test_preds        += model.predict_proba(X_test)[:, 1] / SKF.n_splits
-
-    fold_auc = roc_auc_score(y_va, oof_preds[va_idx])
-    print(f"  Fold {fold+1}: AUC = {fold_auc:.5f}")
-
-final_auc = roc_auc_score(y, oof_preds)
-print(f"\nFinal OOF AUC: {final_auc:.5f}")
-
-# ── Save submission ────────────────────────────────────────────────────────────
-submission = pd.DataFrame({
-    "sample_id":   test[ID_COL],
-    "loan_status": test_preds,
-})
-submission.to_csv("submission.csv", index=False)
-print(f"\nSubmission saved -> submission.csv  ({len(submission)} rows)")
-print(submission.head())
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--fast", action="store_true", help="skip tuning, use preset params")
+    ap.add_argument("--quick", action="store_true", help="few trials, fast smoke test")
+    args = ap.parse_args()
+    main(args.quick, args.fast)

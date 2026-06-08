@@ -1,0 +1,40 @@
+{
+  "lightgbm": {
+    "objective": "binary",
+    "metric": "auc",
+    "verbosity": -1,
+    "n_estimators": 964,
+    "learning_rate": 0.0101,
+    "num_leaves": 79,
+    "max_depth": 4,
+    "min_child_samples": 69,
+    "feature_fraction": 0.797,
+    "bagging_fraction": 0.734,
+    "bagging_freq": 4,
+    "reg_alpha": 0.00016,
+    "reg_lambda": 0.0012,
+    "random_state": 42
+  },
+  "xgboost": {
+    "objective": "binary:logistic",
+    "eval_metric": "auc",
+    "tree_method": "hist",
+    "n_estimators": 1200,
+    "learning_rate": 0.015,
+    "max_depth": 4,
+    "min_child_weight": 5,
+    "subsample": 0.75,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 0.1,
+    "reg_lambda": 1.0,
+    "random_state": 42
+  },
+  "catboost": {
+    "iterations": 800,
+    "learning_rate": 0.03,
+    "depth": 5,
+    "l2_leaf_reg": 5.0,
+    "random_seed": 42,
+    "verbose": 0
+  }
+}

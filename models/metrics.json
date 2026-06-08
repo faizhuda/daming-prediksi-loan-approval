@@ -1,0 +1,18 @@
+{
+  "single": {
+    "lightgbm": 0.9322300858923599,
+    "xgboost": 0.9322612786202275,
+    "catboost": 0.9303018605115907
+  },
+  "blend_weights": [
+    3,
+    3,
+    1
+  ],
+  "blend_oof_auc": 0.9324715289519445,
+  "cv_auc": {
+    "lightgbm": null,
+    "xgboost": null,
+    "catboost": null
+  }
+}
