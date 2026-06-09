@@ -222,3 +222,6 @@ models/*.pkl
 models/*.npz
 _experiment.py
 catboost_info/
+node_modules/
+package.json
+package-lock.json
