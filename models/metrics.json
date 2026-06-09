@@ -1,7 +1,7 @@
 {
   "single": {
-    "lightgbm": 0.9322300858923599,
-    "xgboost": 0.9322612786202275,
+    "lightgbm": 0.932405773597813,
+    "xgboost": 0.9322738839876578,
     "catboost": 0.9303018605115907
   },
   "blend_weights": [
@@ -9,10 +9,10 @@
     3,
     1
   ],
-  "blend_oof_auc": 0.9324715289519445,
+  "blend_oof_auc": 0.9324585235149182,
   "cv_auc": {
-    "lightgbm": null,
-    "xgboost": null,
+    "lightgbm": 0.9326006642681092,
+    "xgboost": 0.9326346187802189,
     "catboost": null
   }
 }

@@ -49,8 +49,8 @@ PRESET_PARAMS = {
 }
 
 
-def main(quick: bool, fast: bool):
-    n_lgb, n_xgb, n_cat = (5, 5, 5) if quick else (60, 50, 25)
+def main(quick: bool, fast: bool, no_cat_tune: bool = False):
+    n_lgb, n_xgb, n_cat = (5, 5, 5) if quick else (50, 50, 25)
     MODELS_DIR.mkdir(exist_ok=True)
 
     train, test = lp.load_data(".")
@@ -68,17 +68,32 @@ def main(quick: bool, fast: bool):
             PRESET_PARAMS["lightgbm"], PRESET_PARAMS["xgboost"], PRESET_PARAMS["catboost"])
         lgb_cv = xgb_cv = cat_cv = None
     else:
+        # Load existing params as fallback (in case process was interrupted mid-tune)
+        existing = {}
+        if (MODELS_DIR / "best_params.json").exists():
+            existing = json.load(open(MODELS_DIR / "best_params.json"))
+
         print("Tuning LightGBM...")
         lgb_params, lgb_cv = lp.tune_lightgbm(X_oh, y, n_trials=n_lgb)
         print(f"  best CV AUC = {lgb_cv:.5f}\n")
+        # Save immediately so progress is not lost if interrupted later
+        lp.save_json({**existing, "lightgbm": lgb_params}, MODELS_DIR / "best_params.json")
+        existing["lightgbm"] = lgb_params
 
         print("Tuning XGBoost...")
         xgb_params, xgb_cv = lp.tune_xgboost(X_oh, y, n_trials=n_xgb)
         print(f"  best CV AUC = {xgb_cv:.5f}\n")
+        lp.save_json({**existing, "xgboost": xgb_params}, MODELS_DIR / "best_params.json")
+        existing["xgboost"] = xgb_params
 
-        print("Tuning CatBoost...")
-        cat_params, cat_cv = lp.tune_catboost(X_nat, y, cat_features, n_trials=n_cat)
-        print(f"  best CV AUC = {cat_cv:.5f}\n")
+        if no_cat_tune:
+            print("CatBoost: skipping tune, using preset params.\n")
+            cat_params, cat_cv = PRESET_PARAMS["catboost"], None
+        else:
+            print("Tuning CatBoost...")
+            cat_params, cat_cv = lp.tune_catboost(X_nat, y, cat_features, n_trials=n_cat)
+            print(f"  best CV AUC = {cat_cv:.5f}\n")
+        lp.save_json({**existing, "catboost": cat_params}, MODELS_DIR / "best_params.json")
 
     lp.save_json(
         {"lightgbm": lgb_params, "xgboost": xgb_params, "catboost": cat_params},
@@ -139,5 +154,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--fast", action="store_true", help="skip tuning, use preset params")
     ap.add_argument("--quick", action="store_true", help="few trials, fast smoke test")
+    ap.add_argument("--no-cat-tune", action="store_true", help="tune LGB+XGB only, CatBoost uses preset")
     args = ap.parse_args()
-    main(args.quick, args.fast)
+    main(args.quick, args.fast, args.no_cat_tune)
