@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """build_master_notebook.py
-Generates lampiran_kode.ipynb — a single, fully self-contained Jupyter notebook
+Generates lampiran_kode.ipynb -- a single, fully self-contained Jupyter notebook
 that contains all pipeline code, Indonesian narrative markdown, and English
-code comments. No imports from src/ — everything is defined inline.
+code comments. No imports from src/ -- everything is defined inline.
 
 Usage: python build_master_notebook.py
 Output: lampiran_kode.ipynb
@@ -21,16 +21,16 @@ def md(src): cells.append(nbf.v4.new_markdown_cell(src.strip()))
 def code(src): cells.append(nbf.v4.new_code_cell(src.strip()))
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 1 — JUDUL & DESKRIPSI
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# CELL 1 -- JUDUL & DESKRIPSI
+# ==============================================================================
 md("""
-# Prediksi Loan Approval — KOM1338 Data Mining
+# Prediksi Loan Approval | KOM1338 Data Mining
 ## Lampiran Kode Lengkap (*Complete Code Appendix*)
 
 | Atribut | Keterangan |
 |---|---|
-| **Kompetisi** | KOM1338 Data Mining — Prediksi *Loan Approval* |
+| **Kompetisi** | KOM1338 Data Mining: Prediksi *Loan Approval* |
 | **Metrik Evaluasi** | AUC-ROC (*Area Under the ROC Curve*) |
 | **Jenis Masalah** | *Binary Classification* (Supervised Learning) |
 | **Pendekatan** | Ensemble tiga model *gradient boosting* + *rank-blend* |
@@ -40,8 +40,7 @@ md("""
 
 ### Ringkasan Metodologi
 
-Notebook ini mendokumentasikan seluruh *pipeline* machine learning secara lengkap —
-dari eksplorasi data hingga *submission*. Tiga model *gradient boosting*
+Notebook ini mendokumentasikan seluruh *pipeline* machine learning secara lengkap, mulai dari eksplorasi data hingga pembuatan *submission*. Tiga model *gradient boosting*
 (LightGBM, XGBoost, CatBoost) dibangun secara terpisah, masing-masing di-*tune*
 menggunakan Optuna (*Tree-structured Parzen Estimator*), lalu digabung melalui
 **rank-blend ensemble**. Evaluasi menggunakan **OOF (*out-of-fold*) prediction**
@@ -68,9 +67,9 @@ sehingga estimasi AUC bebas dari *data leakage*.
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 1 — SETUP & KONFIGURASI GLOBAL
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 1 -- SETUP & KONFIGURASI GLOBAL
+# ==============================================================================
 md("""
 ## 1. Setup & Konfigurasi Global
 
@@ -81,25 +80,25 @@ sepenuhnya dapat direproduksi.
 """)
 
 code("""
-# ── Standard library ────────────────────────────────────────────────────────
+# -- Standard library --------------------------------------------------------
 import json
 import warnings
 from itertools import product
 from pathlib import Path
 
-# ── Numerical & data ────────────────────────────────────────────────────────
+# -- Numerical & data --------------------------------------------------------
 import numpy as np
 import pandas as pd
 
-# ── Visualisation ───────────────────────────────────────────────────────────
+# -- Visualisation -----------------------------------------------------------
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import seaborn as sns
 
-# ── Statistical tests ───────────────────────────────────────────────────────
+# -- Statistical tests -------------------------------------------------------
 from scipy.stats import rankdata, wilcoxon
 
-# ── Machine learning ────────────────────────────────────────────────────────
+# -- Machine learning --------------------------------------------------------
 from sklearn.metrics import roc_auc_score, RocCurveDisplay
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 import lightgbm as lgb
@@ -107,7 +106,7 @@ import xgboost as xgb
 from catboost import CatBoostClassifier
 import optuna
 
-# ── Silence noisy output ────────────────────────────────────────────────────
+# -- Silence noisy output ----------------------------------------------------
 warnings.filterwarnings("ignore")
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -115,13 +114,13 @@ print("Import selesai.")
 """)
 
 code("""
-# ── Global constants ────────────────────────────────────────────────────────
+# -- Global constants --------------------------------------------------------
 SEED      = 42            # reproducibility seed for all random operations
 N_SPLITS  = 5             # number of CV folds
 TARGET    = "loan_status" # binary target: 1 = default, 0 = paid-off
 ID_COL    = "sample_id"   # row identifier (not used as a feature)
 
-# loan_grade has a monotone default rate: A(~5%) → G(~85%)
+# loan_grade has a monotone default rate: A(~5%) > G(~85%)
 # Integer encoding preserves this ordinal relationship more naturally
 # than one-hot encoding, which would lose the ordering information.
 GRADE_MAP = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7}
@@ -141,9 +140,9 @@ print(f"Categorical columns: {CAT_COLS}")
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 2 — MUAT DAN PERIKSA DATA
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 2 -- MUAT DAN PERIKSA DATA
+# ==============================================================================
 md("""
 ## 2. Muat dan Periksa Data
 
@@ -160,7 +159,7 @@ pinjaman dengan 12 fitur input.
 | `person_home_ownership` | Kategorikal | Status kepemilikan rumah (RENT, OWN, MORTGAGE, OTHER) |
 | `person_emp_length` | Numerik | Lama bekerja (tahun) |
 | `loan_intent` | Kategorikal | Tujuan pinjaman (PERSONAL, EDUCATION, dll.) |
-| `loan_grade` | Ordinal | Peringkat kredit (A=terbaik … G=terburuk) |
+| `loan_grade` | Ordinal | Peringkat kredit (A=terbaik, G=terburuk) |
 | `loan_amnt` | Numerik | Jumlah pinjaman (USD) |
 | `loan_int_rate` | Numerik | Suku bunga pinjaman (%) |
 | `loan_percent_income` | Numerik | Rasio pinjaman terhadap pendapatan |
@@ -174,7 +173,7 @@ code("""
 train = pd.read_csv("train.csv")
 test  = pd.read_csv("test.csv")
 
-print(f"Train shape : {train.shape}  (rows × columns)")
+print(f"Train shape : {train.shape}  (baris x kolom)")
 print(f"Test shape  : {test.shape}")
 print(f"\\nClass distribution (TARGET='{TARGET}'):")
 vc = train[TARGET].value_counts()
@@ -192,7 +191,7 @@ info_df = pd.DataFrame({
     "n_unique"   : train.nunique(),
     "sample"     : train.iloc[0],
 })
-print("=== Train — Column Info ===")
+print("=== Train -- Column Info ===")
 print(info_df.to_string())
 """)
 
@@ -203,9 +202,9 @@ display(train.describe().round(2))
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 — EDA
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 3 -- EDA
+# ==============================================================================
 md("""
 ## 3. Analisis Data Eksploratif (EDA)
 
@@ -302,9 +301,7 @@ Visualisasi *default rate* per kategori memberikan insight tentang kekuatan
 prediktif fitur kategorikal. Fitur dengan *default rate* yang sangat bervariasi
 antar kategori merupakan prediktor yang kuat.
 
-Temuan kunci: **`loan_grade`** menunjukkan pola monoton yang sangat kuat —
-dari grade A (~5% default) hingga grade G (~85% default). Ini menjadi justifikasi
-untuk encoding ordinal alih-alih one-hot.
+Temuan kunci: **`loan_grade`** menunjukkan pola monoton yang sangat kuat: grade A memiliki default rate ~5%, meningkat konsisten hingga grade G (~85% default). Pola ini menjadi justifikasi untuk encoding ordinal alih-alih one-hot.
 """)
 
 code("""
@@ -324,7 +321,7 @@ for bar, (_, row) in zip(bars, grade_stats.iterrows()):
             bar.get_height() + 1,
             f"{row['mean']:.0%}\\n(n={int(row['count']):,})",
             ha="center", va="bottom", fontsize=8)
-ax.set_title("Default Rate per Loan Grade\\n(fitur terkuat — encoding ordinal)", fontweight="bold")
+ax.set_title("Default Rate per Loan Grade\\n(fitur terkuat -- encoding ordinal)", fontweight="bold")
 ax.set_xlabel("Loan Grade")
 ax.set_ylabel("Default Rate (%)")
 ax.yaxis.set_major_formatter(mticker.PercentFormatter())
@@ -370,13 +367,11 @@ md("""
 ### 3.4 Matriks Korelasi
 
 Matriks korelasi membantu mengidentifikasi:
-- **Multikolinearitas** — fitur yang sangat berkorelasi satu sama lain dapat
-  menjadi redundan.
-- **Korelasi dengan target** — fitur dengan korelasi tinggi terhadap target
-  merupakan kandidat prediktor yang baik.
+- **Multikolinearitas**: fitur yang sangat berkorelasi satu sama lain berpotensi redundan.
+- **Korelasi dengan target**: fitur dengan korelasi tinggi terhadap target merupakan kandidat prediktor yang kuat.
 
-Temuan: `loan_amnt / person_income` ≈ `loan_percent_income` (korelasi 0.9995),
-sehingga rasio buatan tersebut dihapus — murni redundansi.
+Temuan: `loan_amnt / person_income` ~= `loan_percent_income` (korelasi 0.9995),
+sehingga rasio buatan tersebut dihapus karena bersifat redundan.
 """)
 
 code("""
@@ -406,24 +401,23 @@ print(corr[TARGET].drop(TARGET).abs().sort_values(ascending=False).head(10).to_s
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 4 — FEATURE ENGINEERING
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 4 -- FEATURE ENGINEERING
+# ==============================================================================
 md("""
 ## 4. Rekayasa Fitur (*Feature Engineering*)
 
 ### Keputusan Desain
 
 **Fitur yang dibuat:**
-- `grade_ord`: Encoding ordinal `loan_grade` (A=1 … G=7). Mempertahankan
+- `grade_ord`: Encoding ordinal `loan_grade` (A=1 s/d G=7). Mempertahankan
   informasi urutan yang hilang jika menggunakan one-hot.
-- `int_rate_x_grade`: Interaksi `loan_int_rate × grade_ord`. Suku bunga tinggi
+- `int_rate_x_grade`: Interaksi `loan_int_rate * grade_ord`. Suku bunga tinggi
   pada grade buruk merupakan sinyal risiko yang lebih kuat dari masing-masing
   fitur secara individual.
 
 **Fitur yang diuji dan ditolak (menurunkan AUC):**
-- Rasio `loan_amnt / person_income`: Korelasi 0.9995 dengan `loan_percent_income`
-  yang sudah ada — murni redundansi.
+- Rasio `loan_amnt / person_income`: berkorelasi 0.9995 dengan `loan_percent_income` yang sudah ada. Dihapus karena tidak menambah informasi baru.
 - Flag anomali (`person_age > 100`, `person_emp_length > person_age - 18`):
   Memperkenalkan noise, AUC turun 0.0002.
 - Deviasi dari mean grup: Menambah dimensi tanpa sinyal baru.
@@ -453,16 +447,16 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     # High interest rate on a bad grade is a stronger default signal than either alone
     df["int_rate_x_grade"] = df["loan_int_rate"] * df["grade_ord"]
 
-    # Drop original string column — grade_ord carries all the information
+    # Drop original string column -- grade_ord carries all the information
     return df.drop(columns=["loan_grade"])
 
 
-# ── Validation: verify monotone default rate ─────────────────────────────────
+# -- Validation: verify monotone default rate ---------------------------------
 print("Default rate per loan_grade (membuktikan sifat ordinal):")
 grade_default = (train.groupby("loan_grade")[TARGET]
                  .mean().reindex(list("ABCDEFG")) * 100)
 for grade, rate in grade_default.items():
-    bar = "█" * int(rate / 3)
+    bar = "#" * int(rate / 3)
     print(f"  Grade {grade} (ord={GRADE_MAP[grade]}): {rate:5.1f}%  {bar}")
 """)
 
@@ -478,9 +472,9 @@ print(sample_eng[["grade_ord", "loan_int_rate", "int_rate_x_grade"]].to_string()
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 5 — PREPROCESSING & ENCODING
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 5 -- PREPROCESSING & ENCODING
+# ==============================================================================
 md("""
 ## 5. Preprocessing & Encoding
 
@@ -491,8 +485,7 @@ Dua tampilan data disiapkan secara terpisah:
    secara native.
 
 2. **Native categorical** (untuk CatBoost): fitur kategorikal dibiarkan sebagai
-   string. CatBoost menggunakan *target statistics* secara internal — lebih
-   informatif dan tidak membutuhkan re-encoding.
+   string. CatBoost menggunakan *target statistics* secara internal, yang lebih informatif dan tidak membutuhkan re-encoding.
 
 Penting: kolom one-hot di *test set* disejajarkan dengan *training set* menggunakan
 `reindex(..., fill_value=0)` untuk menghindari ketidakcocokan kolom.
@@ -515,7 +508,7 @@ def make_onehot(train_df: pd.DataFrame, test_df: pd.DataFrame):
 
     feat_cols = tr.columns.drop([TARGET, ID_COL])
 
-    # Align test columns — some dummy categories may be absent in test set
+    # Align test columns -- some dummy categories may be absent in test set
     te = te.reindex(columns=feat_cols, fill_value=0)
 
     X      = tr[feat_cols].copy()
@@ -552,7 +545,7 @@ def make_native(train_df: pd.DataFrame, test_df: pd.DataFrame):
     return X, y, X_test, CAT_COLS
 
 
-# ── Apply preprocessing ────────────────────────────────────────────────────
+# -- Apply preprocessing ----------------------------------------------------
 X_oh, y, X_oh_test              = make_onehot(train, test)
 X_nat, _, X_nat_test, cat_feats = make_native(train, test)
 
@@ -565,16 +558,16 @@ for c in X_oh.columns:
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 6 — CROSS-VALIDATION FRAMEWORK
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 6 -- CROSS-VALIDATION FRAMEWORK
+# ==============================================================================
 md("""
 ## 6. Fungsi *Cross-Validation* (OOF)
 
 ### Strategi Validasi
 
 **StratifiedKFold(n_splits=5)** digunakan karena:
-- Dataset tidak seimbang — stratifikasi menjaga proporsi kelas 14.2% di setiap fold.
+- Dataset tidak seimbang, sehingga stratifikasi diperlukan untuk menjaga proporsi kelas 14.2% di setiap fold.
 - 5 fold memberikan keseimbangan antara bias estimasi dan varians.
 - `shuffle=True` + `random_state=42` memastikan pembagian yang acak namun reproducible.
 
@@ -591,7 +584,7 @@ dan lebih aman dari *cross_val_score* biasa karena kita menyimpan prediksi per-b
 
 code("""
 def get_folds():
-    \"\"\"Return the shared CV splitter — identical for all models for fair comparison.\"\"\"
+    \"\"\"Return the shared CV splitter -- identical for all models for fair comparison.\"\"\"
     return StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
 
 
@@ -621,7 +614,7 @@ def cv_fit_predict(make_model, X, y, X_test, cat_features=None, verbose=True):
         X_tr, X_va = X.iloc[tr_idx], X.iloc[va_idx]
         y_tr       = y[tr_idx]
 
-        # Fresh model each fold — prevents gradient/state accumulation across folds
+        # Fresh model each fold -- prevents gradient/state accumulation across folds
         model = make_model()
 
         if cat_features is not None:
@@ -641,7 +634,7 @@ def cv_fit_predict(make_model, X, y, X_test, cat_features=None, verbose=True):
 
     if verbose:
         oof_auc = roc_auc_score(y, oof)
-        print(f"  ► OOF AUC = {oof_auc:.5f}\\n")
+        print(f"  > OOF AUC = {oof_auc:.5f}\\n")
 
     return oof, test_pred, models
 
@@ -650,9 +643,9 @@ print("Fungsi cv_fit_predict siap digunakan.")
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 7 — HYPERPARAMETER TUNING
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 7 -- HYPERPARAMETER TUNING
+# ==============================================================================
 md("""
 ## 7. *Hyperparameter Tuning* dengan Optuna
 
@@ -666,11 +659,11 @@ model probabilistik dari hasil trial sebelumnya untuk memandu eksplorasi.
 
 | Parameter | Pengaruh |
 |---|---|
-| `max_depth` | Mengontrol kompleksitas pohon — nilai kecil (4-5) mengurangi overfitting |
-| `learning_rate` | Kecepatan belajar — lebih kecil → lebih akurat tapi butuh lebih banyak pohon |
-| `n_estimators` | Jumlah pohon — lebih banyak tidak selalu lebih baik |
-| `min_child_samples` | Regularisasi — mencegah split pada sampel terlalu sedikit |
-| `reg_alpha/lambda` | Regularisasi L1/L2 — mengurangi overfitting |
+| `max_depth` | Mengontrol kompleksitas pohon; nilai kecil (4-5) mengurangi overfitting |
+| `learning_rate` | Kecepatan belajar; nilai lebih kecil menghasilkan model lebih akurat dengan lebih banyak pohon |
+| `n_estimators` | Jumlah pohon; lebih banyak tidak selalu menghasilkan performa lebih baik |
+| `min_child_samples` | Regularisasi; mencegah split pada node dengan sampel terlalu sedikit |
+| `reg_alpha/lambda` | Regularisasi L1/L2 untuk mengurangi overfitting |
 
 **Catatan penting:** CatBoost tidak di-tune dengan Optuna karena setiap trial
 membutuhkan ~5-6 menit (jauh lebih lambat dari LGB/XGB). Parameter CatBoost
@@ -678,7 +671,7 @@ menggunakan nilai yang telah divalidasi secara manual.
 """)
 
 code("""
-# ── LightGBM Tuning ──────────────────────────────────────────────────────────
+# -- LightGBM Tuning ----------------------------------------------------------
 def tune_lightgbm(X, y, n_trials=50, seed=SEED):
     \"\"\"Tune LightGBM hyperparameters using Optuna TPE sampler.
 
@@ -730,11 +723,11 @@ def tune_lightgbm(X, y, n_trials=50, seed=SEED):
     return best, study.best_value
 
 
-# ── XGBoost Tuning ───────────────────────────────────────────────────────────
+# -- XGBoost Tuning -----------------------------------------------------------
 def tune_xgboost(X, y, n_trials=50, seed=SEED):
     \"\"\"Tune XGBoost hyperparameters using Optuna TPE sampler.
 
-    Includes gamma (min_split_loss) in the search space — this is unique to XGBoost
+    Includes gamma (min_split_loss) in the search space -- this is unique to XGBoost
     and helps prune unpromising tree splits.
 
     Returns:
@@ -775,12 +768,12 @@ def tune_xgboost(X, y, n_trials=50, seed=SEED):
     return best, study.best_value
 
 
-# ── CatBoost Tuning (referensi — tidak dijalankan karena runtime ~2 jam) ─────
+# -- CatBoost Tuning (referensi -- tidak dijalankan karena runtime ~2 jam) -----
 def tune_catboost(X, y, cat_features, n_trials=25, seed=SEED):
     \"\"\"Tune CatBoost hyperparameters using Optuna TPE sampler.
 
     WARNING: Each trial takes ~5-6 minutes (CatBoost cannot use cross_val_score
-    natively for categorical features — requires manual fold loop). With 25 trials,
+    natively for categorical features -- requires manual fold loop). With 25 trials,
     total runtime is ~2 hours.
 
     This function is included for completeness. In practice, use preset params.
@@ -828,7 +821,7 @@ Untuk menjalankan tuning penuh dari awal, ubah `FORCE_RETUNE = True` di bawah.
 """)
 
 code("""
-# ── Preset parameters (validated, ~same performance as full Optuna run) ───────
+# -- Preset parameters (validated, ~same performance as full Optuna run) -------
 PRESET_PARAMS = {
     "lightgbm": dict(
         objective="binary", metric="auc", verbosity=-1,
@@ -862,7 +855,7 @@ if not FORCE_RETUNE and best_params_path.exists():
     print(f"Parameter dimuat dari: {best_params_path}")
     source = "saved"
 elif FORCE_RETUNE:
-    # Run full tuning — takes ~60–90 minutes
+    # Run full tuning -- takes ~60-90 minutes
     print("Menjalankan tuning LightGBM (50 trial)...")
     lgb_params, lgb_cv = tune_lightgbm(X_oh, y, n_trials=50)
     print(f"LGB best CV AUC: {lgb_cv:.5f}")
@@ -897,19 +890,18 @@ for k, v in cat_params.items(): print(f"  {k}: {v}")
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 8 — PELATIHAN MODEL & PREDIKSI OOF
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 8 -- PELATIHAN MODEL & PREDIKSI OOF
+# ==============================================================================
 md("""
 ## 8. Pelatihan Model & Prediksi OOF
 
 Ketiga model dilatih menggunakan `cv_fit_predict` dengan parameter yang sudah
 ditentukan. Setiap model menghasilkan:
-- **OOF predictions**: probabilitas default untuk setiap baris training
-  (bebas *leakage* — setiap baris diprediksi oleh model yang tidak melihatnya)
+- **OOF predictions**: probabilitas default untuk setiap baris training. Setiap baris diprediksi oleh model yang tidak melihatnya saat pelatihan (*leakage-free*).
 - **Test predictions**: rata-rata probabilitas dari semua fold
 
-Proses ini membutuhkan waktu sekitar 15–30 menit (tergantung hardware).
+Proses ini membutuhkan waktu sekitar 15-30 menit (tergantung hardware).
 """)
 
 code("""
@@ -950,7 +942,7 @@ cat_oof_auc = roc_auc_score(y, oof_cat)
 """)
 
 code("""
-# ── Ringkasan performa model tunggal ──────────────────────────────────────────
+# -- Ringkasan performa model tunggal ------------------------------------------
 print("\\n" + "=" * 45)
 print("RINGKASAN PERFORMA MODEL TUNGGAL")
 print("=" * 45)
@@ -960,15 +952,15 @@ singles = {
     "CatBoost" : cat_oof_auc,
 }
 for name, auc in singles.items():
-    bar = "█" * int((auc - 0.9) / 0.001)
+    bar = "#" * int((auc - 0.9) / 0.001)
     print(f"  {name:12s}: OOF AUC = {auc:.5f}  {bar}")
 
-# ── ROC Curve comparison ──────────────────────────────────────────────────────
+# -- ROC Curve comparison ------------------------------------------------------
 fig, ax = plt.subplots(figsize=(7, 6))
 for name, oof_pred in [("LightGBM", oof_lgb), ("XGBoost", oof_xgb), ("CatBoost", oof_cat)]:
     RocCurveDisplay.from_predictions(y, oof_pred, name=f"{name} (AUC={roc_auc_score(y, oof_pred):.4f})", ax=ax)
 ax.plot([0, 1], [0, 1], "k--", linewidth=0.8, label="Random (AUC=0.5000)")
-ax.set_title("ROC Curve — OOF Predictions (5-Fold CV)", fontsize=12, fontweight="bold")
+ax.set_title("ROC Curve -- OOF Predictions (5-Fold CV)", fontsize=12, fontweight="bold")
 ax.legend(loc="lower right", fontsize=9)
 ax.set_xlabel("False Positive Rate")
 ax.set_ylabel("True Positive Rate")
@@ -978,9 +970,9 @@ plt.show()
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 9 — ENSEMBLE: RANK-BLEND
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 9 -- ENSEMBLE: RANK-BLEND
+# ==============================================================================
 md("""
 ## 9. Ensemble: *Rank-Blend*
 
@@ -988,7 +980,7 @@ md("""
 
 Ensemble sederhana (rata-rata probabilitas) rentan terhadap perbedaan skala dan
 kalibrasi antar model. *Rank-blend* menormalisasi prediksi setiap model ke
-peringkat relatif (0–1) terlebih dahulu, kemudian menggabungkannya secara
+peringkat relatif (0-1) terlebih dahulu, kemudian menggabungkannya secara
 berbobot.
 
 Keunggulan *rank-blend*:
@@ -1000,9 +992,9 @@ Keunggulan *rank-blend*:
 
 ### Pencarian Bobot Optimal
 
-*Grid search* sederhana dengan bobot integer (0–3) pada OOF AUC. Ruang
+*Grid search* sederhana dengan bobot integer (0-3) pada OOF AUC. Ruang
 pencariannya kecil ($4^3 = 64$ kombinasi) sehingga exhaustive search feasible.
-Bobot terbaik: **3 · LGB + 3 · XGB + 1 · Cat**.
+Bobot terbaik yang ditemukan: **3xLGB + 3xXGB + 1xCat**.
 """)
 
 code("""
@@ -1068,11 +1060,11 @@ print("=" * 50)
 print(f"  LightGBM  (w={best_weights[0]}): OOF AUC = {lgb_oof_auc:.5f}")
 print(f"  XGBoost   (w={best_weights[1]}): OOF AUC = {xgb_oof_auc:.5f}")
 print(f"  CatBoost  (w={best_weights[2]}): OOF AUC = {cat_oof_auc:.5f}")
-print(f"  {'─'*40}")
-print(f"  Rank-Blend {best_weights}: OOF AUC = {blend_auc:.5f}  ← terbaik")
+print(f"  {'-'*40}")
+print(f"  Rank-Blend {best_weights}: OOF AUC = {blend_auc:.5f}  (terbaik)")
 print(f"  Improvement vs best single: +{(blend_auc - max(lgb_oof_auc, xgb_oof_auc, cat_oof_auc)):.5f}")
 
-# ── Visualise weight grid ──────────────────────────────────────────────────
+# -- Visualise weight grid --------------------------------------------------
 grid = (0, 1, 2, 3)
 results = {}
 for w in product(grid, repeat=3):
@@ -1085,14 +1077,14 @@ sorted_results = sorted(results.items(), key=lambda x: -x[1])
 print("\\nTop 10 bobot terbaik:")
 print(f"  {'Bobot (LGB,XGB,Cat)':25s}  OOF AUC")
 for w, auc in sorted_results[:10]:
-    marker = " ← TERPILIH" if w == best_weights else ""
+    marker = " (TERPILIH)" if w == best_weights else ""
     print(f"  {str(w):25s}  {auc:.5f}{marker}")
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 10 — FEATURE IMPORTANCE
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 10 -- FEATURE IMPORTANCE
+# ==============================================================================
 md("""
 ## 10. Analisis *Feature Importance*
 
@@ -1102,9 +1094,7 @@ pada prediksi model. Ini penting untuk:
 - **Validasi**: memastikan model menangkap sinyal yang masuk akal secara domain.
 - **Feature selection**: mengidentifikasi fitur yang mungkin dapat dihapus.
 
-Kita menggunakan *gain importance* dari LightGBM — rata-rata penurunan *loss*
-(AUC-berbobot) yang disebabkan oleh setiap fitur. Ini lebih informatif dari
-*split importance* (yang bias terhadap fitur dengan banyak nilai unik).
+Kita menggunakan *gain importance* dari LightGBM, yaitu rata-rata penurunan *loss* (berbobot AUC) yang disebabkan oleh setiap fitur. Metrik ini lebih informatif dibanding *split importance* yang cenderung bias terhadap fitur dengan banyak nilai unik.
 """)
 
 code("""
@@ -1119,7 +1109,7 @@ fi_lgb["importance_pct"] = fi_lgb["importance"] / fi_lgb["importance"].sum() * 1
 
 fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-# ── LightGBM feature importance (top 15) ──────────────────────────────────
+# -- LightGBM feature importance (top 15) ----------------------------------
 ax = axes[0]
 top15 = fi_lgb.head(15)
 colors = plt.cm.viridis_r(np.linspace(0.1, 0.85, len(top15)))
@@ -1128,11 +1118,11 @@ bars = ax.barh(top15["feature"][::-1], top15["importance_pct"][::-1],
 for bar, val in zip(bars, top15["importance_pct"][::-1]):
     ax.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height()/2,
             f"{val:.1f}%", va="center", fontsize=8)
-ax.set_title("LightGBM — Feature Importance (Gain, top 15)", fontweight="bold")
+ax.set_title("LightGBM -- Feature Importance (Gain, top 15)", fontweight="bold")
 ax.set_xlabel("Rata-rata Gain Importance (%)")
 ax.set_xlim(0, top15["importance_pct"].max() * 1.18)
 
-# ── XGBoost feature importance (top 15) ────────────────────────────────────
+# -- XGBoost feature importance (top 15) ------------------------------------
 fi_xgb = pd.DataFrame({
     "feature"    : X_oh.columns,
     "importance" : np.mean([m.feature_importances_ for m in xgb_models], axis=0),
@@ -1147,7 +1137,7 @@ bars2 = ax.barh(top15_xgb["feature"][::-1], top15_xgb["importance_pct"][::-1],
 for bar, val in zip(bars2, top15_xgb["importance_pct"][::-1]):
     ax.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height()/2,
             f"{val:.1f}%", va="center", fontsize=8)
-ax.set_title("XGBoost — Feature Importance (Gain, top 15)", fontweight="bold")
+ax.set_title("XGBoost -- Feature Importance (Gain, top 15)", fontweight="bold")
 ax.set_xlabel("Rata-rata Gain Importance (%)")
 ax.set_xlim(0, top15_xgb["importance_pct"].max() * 1.18)
 
@@ -1162,17 +1152,15 @@ print(fi_lgb[["feature", "importance_pct"]].head(10).to_string(index=False))
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 11 — UJI SIGNIFIKANSI
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 11 -- UJI SIGNIFIKANSI
+# ==============================================================================
 md("""
 ## 11. Uji Signifikansi (*Wilcoxon Signed-Rank Test*)
 
 ### Motivasi
 
-Perbedaan OOF AUC antar model sangat kecil (LGB=0.9324 vs XGB=0.9323 → selisih
-0.0001). Pertanyaan kritis: apakah perbedaan ini **signifikan secara statistik**
-atau hanya *noise* dari pembagian fold yang kebetulan?
+Perbedaan OOF AUC antar model sangat kecil (LGB=0.9324 vs XGB=0.9323, selisih hanya 0.0001). Pertanyaan kritis: apakah perbedaan ini **signifikan secara statistik**, atau sekadar *noise* dari pembagian fold?
 
 ### Metode: Wilcoxon Signed-Rank Test
 
@@ -1183,17 +1171,15 @@ Dipilih karena:
 - Lebih tepat dari paired t-test untuk n kecil.
 
 **Hipotesis:**
-- H₀: Tidak ada perbedaan sistematis antara AUC kedua model
-- H₁: Ada perbedaan sistematis (satu model konsisten lebih baik)
-- α = 0.05 (level signifikansi)
+- H0: Tidak ada perbedaan sistematis antara AUC kedua model
+- H1: Ada perbedaan sistematis (satu model konsisten lebih baik)
+- alpha = 0.05 (level signifikansi)
 
-**Interpretasi:** Jika p > 0.05, kita *gagal menolak H₀* — perbedaan tidak
-signifikan, dan pilihan model lebih didorong oleh diversifikasi daripada
-superioritas absolut.
+**Interpretasi:** Jika p > 0.05, kita *gagal menolak H0*. Artinya, perbedaan tidak signifikan secara statistik dan pilihan ensemble lebih didorong oleh diversifikasi daripada superioritas absolut satu model.
 """)
 
 code("""
-# ── Hitung AUC per-fold untuk setiap model ────────────────────────────────────
+# -- Hitung AUC per-fold untuk setiap model ------------------------------------
 # We reuse the same fold splitter (identical seed/params) to get fold indices
 folds = get_folds()
 
@@ -1232,7 +1218,7 @@ print(f"  {'Std':>4}  {np.std(fold_auc_lgb):.5f}  {np.std(fold_auc_xgb):.5f}  "
 """)
 
 code("""
-# ── Wilcoxon Signed-Rank Test ──────────────────────────────────────────────────
+# -- Wilcoxon Signed-Rank Test --------------------------------------------------
 alpha = 0.05
 
 comparisons = [
@@ -1245,7 +1231,7 @@ comparisons = [
 ]
 
 print("=" * 65)
-print("WILCOXON SIGNED-RANK TEST (α = 0.05, n_folds = 5)")
+print("WILCOXON SIGNED-RANK TEST (alpha = 0.05, n_folds = 5)")
 print("=" * 65)
 print(f"  {'Perbandingan':20s}  {'Statistic':>10}  {'p-value':>10}  {'Kesimpulan'}")
 print("  " + "-" * 63)
@@ -1261,16 +1247,16 @@ for name, a, b in comparisons:
 
 print("=" * 65)
 print(f"\\nKesimpulan:")
-print(f"  • Perbedaan antara LGB dan XGB sangat kecil (selisih ~0.0001)")
+print(f"  - Perbedaan antara LGB dan XGB sangat kecil (selisih ~0.0001)")
 print(f"    dan kemungkinan besar TIDAK signifikan secara statistik.")
-print(f"  • Dengan n=5 fold, daya statistik (statistical power) rendah —")
+print(f"  - Dengan n=5 fold, daya statistik (statistical power) rendah.")
 print(f"    butuh lebih banyak fold untuk deteksi perbedaan kecil.")
-print(f"  • Pemilihan ensemble tetap valid: bukan karena satu model dominan,")
+print(f"  - Pemilihan ensemble tetap valid: bukan karena satu model dominan,")
 print(f"    tapi karena diversifikasi error antar model meningkatkan robustness.")
 """)
 
 code("""
-# ── Visualisasi per-fold AUC distribution ────────────────────────────────────
+# -- Visualisasi per-fold AUC distribution ------------------------------------
 fig, ax = plt.subplots(figsize=(9, 5))
 
 data_to_plot = [fold_auc_lgb, fold_auc_xgb, fold_auc_cat, fold_auc_blend]
@@ -1291,7 +1277,7 @@ for i, (data, color) in enumerate(zip(data_to_plot, colors_box), start=1):
 
 ax.set_xticklabels(labels)
 ax.set_ylabel("AUC (per fold)")
-ax.set_title("Distribusi AUC per Fold — Perbandingan Model", fontweight="bold")
+ax.set_title("Distribusi AUC per Fold -- Perbandingan Model", fontweight="bold")
 ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.4f"))
 ax.grid(axis="y", alpha=0.3)
 
@@ -1301,15 +1287,15 @@ plt.show()
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 12 — GENERASI FILE SUBMISSION
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 12 -- GENERASI FILE SUBMISSION
+# ==============================================================================
 md("""
 ## 12. Generasi File Submission
 
 File submission berisi dua kolom:
 - `sample_id`: ID baris dari test set
-- `loan_status`: probabilitas kontinu (0–1) bahwa pinjaman akan default
+- `loan_status`: probabilitas kontinu (0-1) bahwa pinjaman akan default
 
 **Penting:** Kompetisi membutuhkan **probabilitas** (bukan label biner 0/1),
 karena metrik evaluasinya adalah AUC-ROC yang berbasis ranking.
@@ -1346,7 +1332,7 @@ display(submission.head(10))
 """)
 
 code("""
-# ── Distribusi probabilitas submission ───────────────────────────────────────
+# -- Distribusi probabilitas submission ---------------------------------------
 fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
 # Histogram distribusi probabilitas
@@ -1378,9 +1364,9 @@ plt.show()
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 13 — KESIMPULAN
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# SECTION 13 -- KESIMPULAN
+# ==============================================================================
 md("""
 ## 13. Kesimpulan & Ringkasan
 
@@ -1391,9 +1377,9 @@ md("""
 | LightGBM (50 trial Optuna) | 0.93241 |
 | XGBoost  (50 trial Optuna) | 0.93227 |
 | CatBoost (parameter manual) | 0.93030 |
-| **Rank-Blend (3·LGB + 3·XGB + 1·Cat)** | **0.93246** ← terbaik |
+| **Rank-Blend (3xLGB + 3xXGB + 1xCat)** | **0.93246 (terbaik)** |
 
-Target kompetisi: AUC ≥ 0.92 ✓
+Target kompetisi: AUC >= 0.92 (tercapai).
 
 ---
 
@@ -1404,7 +1390,7 @@ Target kompetisi: AUC ≥ 0.92 ✓
    mempertahankan informasi urutan.
 
 2. **Fitur rekayasa berlebih menurunkan AUC**: Lebih dari 10 fitur tambahan
-   (flag anomali, deviasi grup, rasio baru) diuji — semuanya menurunkan OOF AUC.
+   (flag anomali, deviasi grup, rasio baru) diuji dan semuanya menurunkan OOF AUC.
    Sinyal terkonsentrasi di fitur bawaan yang kuat.
 
 3. **Tanpa *class weighting* lebih baik**: AUC adalah metrik berbasis *ranking*;
@@ -1415,7 +1401,7 @@ Target kompetisi: AUC ≥ 0.92 ✓
    terdekorelasi sehingga blend konsisten mengungguli model terbaik secara individual.
 
 5. **Uji Wilcoxon**: Perbedaan antar model tidak signifikan secara statistik
-   (p > 0.05) — pilihan ensemble didorong oleh diversifikasi, bukan superioritas absolut.
+   (p > 0.05). Pilihan ensemble didorong oleh diversifikasi error antar model, bukan superioritas absolut.
 
 ---
 
@@ -1425,7 +1411,7 @@ Target kompetisi: AUC ≥ 0.92 ✓
   *reproducibility* dan integritas akademik. Data eksternal (profil industri, data
   ekonomi makro) berpotensi meningkatkan AUC ke >0.94.
 - **Ceiling AUC**: Dengan fitur yang tersedia, batas atas AUC diperkirakan
-  0.932–0.935. Tuning lebih dalam (>200 trial) tidak menghasilkan peningkatan signifikan.
+  0.932-0.935. Tuning lebih dalam (>200 trial) tidak menghasilkan peningkatan signifikan.
 - **CatBoost tidak di-tune penuh**: Waktu tuning ~2 jam per 25 trial. Parameter
   manual digunakan sebagai kompromi.
 
@@ -1450,9 +1436,9 @@ jupyter nbconvert --to notebook --execute lampiran_kode.ipynb
 """)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # WRITE NOTEBOOK
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 nb.cells = cells
 out_path = Path("lampiran_kode.ipynb")
 with open(out_path, "w", encoding="utf-8") as f:
